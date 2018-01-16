@@ -9,25 +9,47 @@ let  MIME = {
     '.js': 'application/javascript'
 }
 
-function combineFiles(pathnames,callback){
-    let output=[];
-    (function next (i,len){
+function validateFile(pathnames,callback){
+    (function next(i,len){
+        //递归检测pathnames数组的每一个path路径的文件是否存在
         if(i<len){
-            fs.readFile(pathnames[i],function(err,data){
+            fs.stat(pathnames[i],function(err,stats){
                 if(err){
                     callback(err)
                 }
+                //检测的对象是否是file
+                else if(!stats.isFile()){
+                    callback(new Error())
+                }
                 else{
-                    output.push(data)
                     next(i+1,len)
                 }
             })
         }
+        //检测完毕
         else{
-            callback(null, Buffer.concat(output))
+            callback(null,pathnames)
         }
     })(0,pathnames.length)
+}
 
+function outputFiles(pathnames,writer){
+    (function next(i,len){
+        if(i<len){
+            //建立一个读取文件的stream
+            let reader = fs.createReadStream(pathnames[i])
+            //将读取到的文件写入response这个writer中，并且在stream读取完毕后，并不结束wiriter
+            reader.pipe(writer,{end:false})
+            //递归进行读取下一个文件
+            reader.on('end',function(){
+                next(i+1,len)
+            })
+        }
+        else{
+            //最后一个文件读取完毕后，关闭writer
+            writer.end()
+        }
+    })(0,pathnames.length)
 }
 
 function main(argv){
@@ -36,16 +58,16 @@ function main(argv){
         port = config.port || '80'
     http.createServer(function(request,response){
         let urlInfo = parseURL(root,request.url)
-        combineFiles(urlInfo.pathnames,function(err,data){
+        validateFile(urlInfo.pathnames,function(err,pathnames){
             if(err){
                 response.writeHead(404)
                 response.end(err.message)
             }
             else{
                 response.writeHead(200,{
-                    'Content-Type': urlInfo.mime
+                    'Content-Type':urlInfo.mime
                 })
-                response.end(data)
+                outputFiles(pathnames, response);
             }
         })
     }).listen(port)
