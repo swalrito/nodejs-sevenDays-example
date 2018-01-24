@@ -56,7 +56,7 @@ function main(argv){
     let config = JSON.parse(fs.readFileSync(argv[0], 'utf-8')),
         root=config.root || '.',
         port = config.port || '80'
-    http.createServer(function(request,response){
+    let server=http.createServer(function(request,response){
         let urlInfo = parseURL(root,request.url)
         validateFile(urlInfo.pathnames,function(err,pathnames){
             if(err){
@@ -71,6 +71,12 @@ function main(argv){
             }
         })
     }).listen(port)
+    //子进程接受SIGTERM信号，关闭服务器并退出进程
+    process.on('SIGTERM',function(){
+        server.close(function(){
+            process.exit(0)
+        })
+    })
 }
 
 function parseURL (root,url){
